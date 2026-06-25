@@ -1,0 +1,114 @@
+# ============================================================
+# TUTORING PLATFORM — Production Docker Compose
+# Usage: docker-compose up --build -d
+# Nginx serves built React app. No source mounts.
+# ============================================================
+
+version: '3.9'
+
+services:
+
+  # ─── PostgreSQL Database ───────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: tutoring_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tutoring_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}   # Must be set in .env — no default
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # No port exposed in prod — only internal network access
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  # ─── Redis ─────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: tutoring_redis
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    # No port exposed in prod — only internal network access
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  # ─── Backend (Express API) ────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: production      # Uses lean production image
+    container_name: tutoring_backend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tutoring_platform}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    # No port exposed — Nginx proxies to it internally
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+      - external
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/api/v1/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── Frontend (Nginx serving built React app) ─────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      target: production      # Nginx stage with built dist
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL}
+        VITE_APP_NAME: ${VITE_APP_NAME:-TutoringPlatform}
+    container_name: tutoring_frontend
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'             # For SSL — mount certs via volume below
+    volumes:
+      - ./ssl:/etc/nginx/ssl:ro    # Mount SSL certificates (Let's Encrypt etc.)
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - external
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  internal:
+    # Backend, DB, Redis — not accessible from outside
+    internal: true
+    name: tutoring_internal
+  external:
+    # Frontend nginx — accessible from internet
+    name: tutoring_external

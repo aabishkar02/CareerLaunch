@@ -1,0 +1,110 @@
+# ============================================================
+# TUTORING PLATFORM — Development Docker Compose
+# Usage: docker-compose -f docker-compose.dev.yml up --build
+# Hot reload enabled for both frontend and backend.
+# ============================================================
+
+version: '3.9'
+
+services:
+
+  # ─── PostgreSQL Database ───────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: tutoring_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tutoring_platform_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'        # Expose so you can connect with TablePlus / DBeaver
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d  # Auto-runs on first start
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis (sessions + BullMQ queues) ─────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: tutoring_redis_dev
+    restart: unless-stopped
+    ports:
+      - '6379:6379'        # Expose for Redis Insight / local debugging
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Adminer (DB GUI in browser) ──────────────────────────
+  adminer:
+    image: adminer:latest
+    container_name: tutoring_adminer_dev
+    restart: unless-stopped
+    ports:
+      - '8080:8080'        # Visit http://localhost:8080 for DB GUI
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── Backend (Express API) ────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: development     # Uses dev stage (nodemon, all deps)
+    container_name: tutoring_backend_dev
+    restart: unless-stopped
+    env_file:
+      - .env                  # Loads your local .env file
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tutoring_platform_dev
+      REDIS_URL: redis://redis:6379
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./backend:/app        # Mount source — enables hot reload via nodemon
+      - /app/node_modules     # Anonymous volume — keeps container node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate dev --name init && npm run dev"
+
+  # ─── Frontend (Vite dev server) ───────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      target: development     # Uses dev stage (Vite HMR)
+    container_name: tutoring_frontend_dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      VITE_API_URL: http://localhost:3000/api/v1
+      VITE_SOCKET_URL: http://localhost:3000
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./frontend:/app       # Mount source — enables Vite HMR
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+networks:
+  default:
+    name: tutoring_dev_network

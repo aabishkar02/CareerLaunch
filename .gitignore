@@ -1,0 +1,38 @@
+# ─── Secrets / environment ───────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ─── Dependencies ────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Build output ────────────────────────────────────────────
+dist/
+build/
+frontend/dist/
+*.tsbuildinfo
+
+# ─── Logs ────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Prisma ──────────────────────────────────────────────────
+backend/node_modules/.prisma/
+
+# ─── Archives / scratch / debug artifacts ────────────────────
+*.zip
+
+# ─── OS / editor ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+.claude/

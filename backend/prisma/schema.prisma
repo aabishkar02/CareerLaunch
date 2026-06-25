@@ -1,0 +1,1515 @@
+// ============================================================
+// TUTORING PLATFORM — PRISMA SCHEMA
+// PostgreSQL 15+
+// ============================================================
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  student
+  tutor
+  admin
+}
+
+enum AssignmentStatus {
+  active
+  ended
+}
+
+enum ExperienceLevel {
+  beginner
+  intermediate
+  advanced
+}
+
+enum ProgressStatus {
+  not_started
+  in_progress
+  completed
+}
+
+enum EnrollmentStatus {
+  active
+  completed
+  cancelled
+}
+
+enum SubmissionStatus {
+  submitted
+  graded
+  late
+}
+
+enum CertStatus {
+  pending
+  tutor_approved
+  approved
+  rejected
+  revoked
+}
+
+enum PlanType {
+  single
+  starter
+  professional
+  complete
+}
+
+enum DayOfWeek {
+  Monday
+  Tuesday
+  Wednesday
+  Thursday
+  Friday
+  Saturday
+  Sunday
+}
+
+enum ChangeType {
+  modify
+  cancel
+  swap
+}
+
+enum RequestStatus {
+  pending
+  approved
+  rejected
+}
+
+enum SessionStatus {
+  pending
+  confirmed
+  cancelled
+  completed
+}
+
+enum LocationType {
+  remote
+  on_site
+}
+
+enum ConversationType {
+  direct
+  group
+}
+
+enum MessageType {
+  text
+  file
+}
+
+enum NotificationType {
+  info
+  warning
+  alert
+  system
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+}
+
+enum PaymentMethod {
+  stripe
+  manual
+  scholarship
+}
+
+enum ContactStatus {
+  new
+  read
+  replied
+}
+
+enum TicketCategory {
+  refund_request
+  tutor_change
+  scheduling_issue
+  payment_issue
+  session_complaint
+  general_support
+  other
+}
+
+enum TicketStatus {
+  open
+  in_review
+  resolved
+  closed
+  refunded
+}
+
+enum TicketPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum JobStatus {
+  queued
+  running
+  done
+  failed
+}
+
+enum SupportChatStatus {
+  waiting
+  active
+  closed
+}
+
+
+// ============================================================
+// CORE — users & auth
+// ============================================================
+
+model User {
+  id               String    @id @default(uuid()) @db.Uuid
+  email            String    @unique @db.VarChar(255)
+  username         String?   @unique @db.VarChar(20)
+
+  password_hash    String    @db.VarChar(255)
+  first_name       String    @db.VarChar(100)
+  last_name        String    @db.VarChar(100)
+  phone            String?   @db.VarChar(20)
+  role             UserRole
+  avatar_url       String?   @db.Text
+  bio              String?   @db.Text
+  timezone         String?   @db.VarChar(60)
+  onboarded        Boolean   @default(false)
+  approved         Boolean   @default(true)
+  suspended        Boolean   @default(false)
+  suspended_reason String?   @db.Text
+  last_login_at    DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  // Auth
+  refresh_tokens   RefreshToken[]
+
+  // Assignments
+  student_assignments      StudentTutorAssignment[] @relation("StudentAssignments")
+  tutor_assignments        StudentTutorAssignment[] @relation("TutorAssignments")
+  assigned_by_assignments  StudentTutorAssignment[] @relation("AssignedByAssignments")
+
+  // Onboarding
+  onboarding_response      OnboardingResponse?
+
+  // Courses
+  courses_created          Course[]
+
+  // Enrollments
+  enrollments              Enrollment[]       @relation("StudentEnrollments")
+  enrollments_created      Enrollment[]       @relation("EnrollmentCreatedBy")
+
+  // Progress
+  student_progress         StudentProgress[]  @relation("StudentProgress")
+  progress_updated_by      StudentProgress[]  @relation("ProgressUpdatedBy")
+
+  // Assignments (learning)
+  assignments_posted         Assignment[]
+  assignment_students        AssignmentStudent[]    @relation("AssignmentStudentUser")
+  assignment_submissions     AssignmentSubmission[] @relation("AssignmentSubmissionStudent")
+  assignment_grader          AssignmentSubmission[] @relation("SubmissionGrader")
+
+  // Certifications
+  certifications_student   Certification[]    @relation("CertStudent")
+  certifications_tutor     Certification[]    @relation("CertTutor")
+  certifications_approved  Certification[]    @relation("CertApprovedBy")
+
+  // Reviews
+  reviews_given            TutorReview[]      @relation("ReviewStudent")
+  reviews_received         TutorReview[]      @relation("ReviewTutor")
+
+  // Scheduling
+  availability             TutorAvailability[]
+  schedule_change_requests ScheduleChangeRequest[] @relation("TutorChangeRequests")
+  schedule_reviews         ScheduleChangeRequest[] @relation("AdminReviewedRequests")
+  sessions_as_student      Session[]          @relation("SessionStudent")
+  sessions_as_tutor        Session[]          @relation("SessionTutor")
+  sessions_cancelled       Session[]          @relation("SessionCancelledBy")
+  sessions_paid_by_me      Session[]          @relation("SessionPaidBy")
+  attendance_logs          AttendanceLog[]    @relation("TutorAttendance")
+  attendance_edited        AttendanceLog[]    @relation("AttendanceEditedBy")
+
+  // Comms
+  conversations_created    Conversation[]
+  conversation_memberships ConversationParticipant[]
+  messages_sent            Message[]
+  notifications_received   Notification[]     @relation("NotificationRecipient")
+  notifications_sent       Notification[]     @relation("NotificationSender")
+
+  // Payments
+  payments                 Payment[]
+
+  // Admin
+  audit_actions            AuditLog[]         @relation("AuditActor")
+  audit_targets            AuditLog[]         @relation("AuditTarget")
+  faqs_created             Faq[]
+  contact_replies          ContactSubmission[]
+
+  // Calendar & meetings
+  course_meeting_links CourseMeetingLink[]
+
+  // Course-tutor assignments
+  course_tutor_slots       CourseTutor[] @relation("CourseTutorUser")
+  course_tutor_assigned_by CourseTutor[] @relation("CourseTutorAssigner")
+
+  // Module-tutor assignments
+  module_tutor_slots       ModuleTutor[] @relation("ModuleTutorUser")
+  module_tutor_assigned_by ModuleTutor[] @relation("ModuleTutorAssigner")
+
+  // Module enrollments
+  module_enrollments_as_student ModuleEnrollment[] @relation("ModuleEnrollmentStudent")
+  module_enrollments_as_tutor   ModuleEnrollment[] @relation("ModuleEnrollmentTutor")
+
+  // Module credits
+  module_credits ModuleCredit[] @relation("ModuleCreditStudent")
+
+
+  tutor_profile              TutorProfile?
+  tutor_busy_slots           TutorBusySlot[]
+  onboarding_requests_sent   OnboardingRequest[] @relation("OnboardingStudent")
+  onboarding_preferred_by    OnboardingRequest[] @relation("OnboardingPreferred")
+  onboarding_assigned_to     OnboardingRequest[] @relation("OnboardingAssigned")
+  onboarding_reviewed        OnboardingRequest[] @relation("OnboardingAdmin")
+
+  tutor_fees_earned  TutorFee[] @relation("TutorFees")
+  student_fees       TutorFee[] @relation("StudentFees")
+  fees_paid_by_me    TutorFee[] @relation("FeesPaidBy")
+
+  // Support tickets
+  support_tickets_submitted SupportTicket[] @relation("TicketStudent")
+  support_tickets_assigned  SupportTicket[] @relation("TicketAdmin")
+  support_messages_sent     SupportMessage[]
+
+  // Help chats (live support)
+  help_chats_requested  HelpChat[] @relation("HelpChatRequester")
+  help_chats_handled    HelpChat[] @relation("HelpChatAdmin")
+  help_chats_closed     HelpChat[] @relation("HelpChatCloser")
+  help_chat_messages    HelpChatMessage[]
+
+  // Managed content
+  modules_created Module[] @relation("ModuleCreator")
+  plans_created   Plan[]   @relation("PlanCreator")
+
+  // Banking & payouts
+  banking_details        TutorBankingDetails?  @relation("TutorBanking")
+  banking_verified_by_me TutorBankingDetails[] @relation("BankingVerifier")
+  payouts_received       TutorPayout[]         @relation("TutorPayouts")
+  payouts_made_by_me     TutorPayout[]         @relation("TutorPayoutAdmin")
+
+  // Weekly payroll payments
+  payroll_payments       PayrollPayment[]       @relation("TutorPayrollPayments")
+  email_templates_updated EmailTemplate[]      @relation("EmailTemplateUpdater")
+
+  @@index([email])
+  @@index([role])
+  @@index([suspended])
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  token      String   @unique @db.Text
+  expires_at DateTime
+  revoked    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("refresh_tokens")
+}
+
+model StudentTutorAssignment {
+  id            String           @id @default(uuid()) @db.Uuid
+  student_id    String           @db.Uuid
+  tutor_id      String           @db.Uuid
+  enrollment_id String?          @db.Uuid
+  start_date    DateTime         @db.Date
+  end_date      DateTime?        @db.Date
+  status        AssignmentStatus @default(active)
+  assigned_by   String?          @db.Uuid
+  notes         String?          @db.Text
+  created_at    DateTime         @default(now())
+
+  student    User        @relation("StudentAssignments",    fields: [student_id],    references: [id], onDelete: Cascade)
+  tutor      User        @relation("TutorAssignments",      fields: [tutor_id],      references: [id], onDelete: Cascade)
+  assigner   User?       @relation("AssignedByAssignments", fields: [assigned_by],   references: [id])
+  enrollment Enrollment? @relation(fields: [enrollment_id], references: [id])
+  tutor_fees TutorFee[]
+
+  @@index([student_id])
+  @@index([tutor_id])
+  @@index([enrollment_id])
+  @@index([status])
+  @@map("student_tutor_assignments")
+}
+
+model OnboardingResponse {
+  id                 String          @id @default(uuid()) @db.Uuid
+  user_id            String          @unique @db.Uuid
+  goals              Json            @default("[]")
+  experience_level   ExperienceLevel
+  preferred_subjects Json            @default("[]")
+  available_days     Json            @default("[]")
+  raw_responses      Json?
+  created_at         DateTime        @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("onboarding_responses")
+}
+
+
+// ============================================================
+// LEARNING — courses, modules, progress, certs
+// ============================================================
+
+model Course {
+  id            String   @id @default(uuid()) @db.Uuid
+  title         String   @db.VarChar(200)
+  slug          String   @unique @db.VarChar(200)
+  description   String   @db.Text
+  category      String?  @db.VarChar(100)
+  thumbnail_url String?  @db.Text
+  featured      Boolean  @default(false)
+  published     Boolean  @default(false)
+  created_by    String?  @db.Uuid
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  creator       User?             @relation(fields: [created_by], references: [id])
+  modules       CourseModule[]
+  pricing_plans PricingPlan[]
+  enrollments   Enrollment[]
+  progress      StudentProgress[]
+  assignments   Assignment[]
+  certifications Certification[]
+  
+  meeting_links      CourseMeetingLink[]
+  tutor_fees         TutorFee[]
+  course_tutors      CourseTutor[]
+  sessions           Session[]
+
+  @@index([category])
+  @@index([published])
+  @@index([featured])
+  @@index([slug])
+  @@map("courses")
+}
+
+model CourseModule {
+  id               String   @id @default(uuid()) @db.Uuid
+  course_id        String   @db.Uuid
+  title            String   @db.VarChar(200)
+  description      String?  @db.Text
+  order_index      Int
+  content_url      String?  @db.Text
+  duration_minutes Int?
+  published        Boolean  @default(false)
+  created_at       DateTime @default(now())
+
+  course             Course             @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  progress           StudentProgress[]
+  questions          ModuleQuestion[]
+  materials          ModuleMaterial[]
+
+  @@unique([course_id, order_index])
+  @@index([course_id])
+  @@map("course_modules")
+}
+
+model ModuleQuestion {
+  id         String   @id @default(uuid()) @db.Uuid
+  module_id  String   @db.Uuid
+  question   String   @db.Text
+  order_index Int     @default(0)
+  required   Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  module    CourseModule           @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  responses SessionQuestionnaire[]
+
+  @@index([module_id])
+  @@map("module_questions")
+}
+
+model SessionQuestionnaire {
+  id          String   @id @default(uuid()) @db.Uuid
+  session_id  String   @db.Uuid
+  question_id String   @db.Uuid
+  answer      String   @db.Text
+  created_at  DateTime @default(now())
+
+  session  Session        @relation(fields: [session_id],  references: [id], onDelete: Cascade)
+  question ModuleQuestion @relation(fields: [question_id], references: [id], onDelete: Cascade)
+
+  @@unique([session_id, question_id])
+  @@index([session_id])
+  @@map("session_questionnaires")
+}
+
+model ModuleMaterial {
+  id          String   @id @default(uuid()) @db.Uuid
+  module_id   String   @db.Uuid
+  title       String   @db.VarChar(200)
+  description String?  @db.Text
+  url         String   @db.Text
+  file_type   String?  @db.VarChar(50)
+  type        String   @default("student") @db.VarChar(20)
+  order_index Int      @default(0)
+  created_at  DateTime @default(now())
+
+  module CourseModule @relation(fields: [module_id], references: [id], onDelete: Cascade)
+
+  @@index([module_id])
+  @@map("module_materials")
+}
+
+model PricingPlan {
+  id          String   @id @default(uuid()) @db.Uuid
+  course_id   String   @db.Uuid
+  plan_type   PlanType
+  price_cents Int
+  currency    String   @default("usd") @db.VarChar(3)
+  description String?  @db.Text
+  active      Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  course   Course    @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@unique([course_id, plan_type])
+  @@index([course_id])
+  @@map("pricing_plans")
+}
+
+model Enrollment {
+  id           String           @id @default(uuid()) @db.Uuid
+  student_id   String           @db.Uuid
+  course_id    String           @db.Uuid
+  payment_id   String?          @db.Uuid
+  plan_type    PlanType
+  status       EnrollmentStatus @default(active)
+  enrolled_by  String?          @db.Uuid
+  enrolled_at  DateTime         @default(now())
+  completed_at DateTime?
+
+  student          User                     @relation("StudentEnrollments", fields: [student_id],  references: [id])
+  course           Course                   @relation(fields: [course_id],   references: [id])
+  payment          Payment?                 @relation(fields: [payment_id],  references: [id])
+  creator          User?                    @relation("EnrollmentCreatedBy", fields: [enrolled_by], references: [id])
+  sessions         Session[]
+  tutor_assignment StudentTutorAssignment[]
+
+  @@unique([student_id, course_id])
+  @@index([student_id])
+  @@index([course_id])
+  @@index([status])
+  @@map("enrollments")
+}
+
+model StudentProgress {
+  id           String         @id @default(uuid()) @db.Uuid
+  student_id   String         @db.Uuid
+  module_id    String         @db.Uuid
+  course_id    String         @db.Uuid
+  status       ProgressStatus @default(not_started)
+  started_at   DateTime?
+  completed_at DateTime?
+  updated_by   String?        @db.Uuid
+
+  student  User         @relation("StudentProgress",  fields: [student_id], references: [id], onDelete: Cascade)
+  module   CourseModule @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  course   Course       @relation(fields: [course_id], references: [id])
+  updater  User?        @relation("ProgressUpdatedBy", fields: [updated_by], references: [id])
+
+  @@unique([student_id, module_id])
+  @@index([student_id])
+  @@index([module_id])
+  @@index([course_id])
+  @@map("student_progress")
+}
+
+model Assignment {
+  id          String   @id @default(uuid()) @db.Uuid
+  tutor_id    String   @db.Uuid
+  course_id   String?  @db.Uuid
+  title       String   @db.VarChar(200)
+  description String   @db.Text
+  due_date    DateTime
+  max_score   Int?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  tutor       User                   @relation(fields: [tutor_id],  references: [id])
+  course      Course?                @relation(fields: [course_id], references: [id])
+  students    AssignmentStudent[]
+  submissions AssignmentSubmission[]
+  files       AssignmentFile[]
+
+  @@index([tutor_id])
+  @@index([due_date])
+  @@map("assignments")
+}
+
+model AssignmentStudent {
+  id            String   @id @default(uuid()) @db.Uuid
+  assignment_id String   @db.Uuid
+  student_id    String   @db.Uuid
+  assigned_at   DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+  student    User       @relation("AssignmentStudentUser", fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([assignment_id, student_id])
+  @@index([assignment_id])
+  @@index([student_id])
+  @@map("assignment_students")
+}
+
+model AssignmentSubmission {
+  id              String           @id @default(uuid()) @db.Uuid
+  assignment_id   String           @db.Uuid
+  student_id      String           @db.Uuid
+  submission_text String?          @db.Text
+  status          SubmissionStatus @default(submitted)
+  score           Int?
+  feedback        String?          @db.Text
+  graded_by       String?          @db.Uuid
+  submitted_at    DateTime         @default(now())
+  graded_at       DateTime?
+  email_triggered Boolean          @default(false)
+
+  assignment Assignment       @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+  student    User             @relation("AssignmentSubmissionStudent", fields: [student_id], references: [id])
+  grader     User?            @relation("SubmissionGrader", fields: [graded_by], references: [id])
+  files      SubmissionFile[]
+
+  @@unique([assignment_id, student_id])
+  @@index([assignment_id])
+  @@index([student_id])
+  @@map("assignment_submissions")
+}
+
+model AssignmentFile {
+  id            String   @id @default(uuid()) @db.Uuid
+  assignment_id String   @db.Uuid
+  file_url      String   @db.Text
+  file_name     String   @db.VarChar(255)
+  file_size     Int?
+  uploaded_at   DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+
+  @@index([assignment_id])
+  @@map("assignment_files")
+}
+
+model SubmissionFile {
+  id            String   @id @default(uuid()) @db.Uuid
+  submission_id String   @db.Uuid
+  file_url      String   @db.Text
+  file_name     String   @db.VarChar(255)
+  file_size     Int?
+  uploaded_at   DateTime @default(now())
+
+  submission AssignmentSubmission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+
+  @@index([submission_id])
+  @@map("submission_files")
+}
+
+model Certification {
+  id                String     @id @default(uuid()) @db.Uuid
+  student_id        String     @db.Uuid
+  tutor_id          String     @db.Uuid
+  course_id         String?    @db.Uuid
+  module_id         String?    @db.Uuid
+  status            CertStatus @default(pending)
+  completion_date   DateTime   @db.Date
+  issued_date       DateTime?  @db.Date
+  pdf_url           String?    @db.Text
+  tutor_notes       String?    @db.Text
+  tutor_approved    Boolean    @default(false)
+  tutor_approved_at DateTime?
+  admin_notes       String?    @db.Text
+  approved_by       String?    @db.Uuid
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
+
+  student  User    @relation("CertStudent",    fields: [student_id],  references: [id])
+  tutor    User    @relation("CertTutor",      fields: [tutor_id],    references: [id])
+  course   Course? @relation(fields: [course_id],  references: [id])
+  module   Module? @relation(fields: [module_id],  references: [id])
+  approver User?   @relation("CertApprovedBy", fields: [approved_by], references: [id])
+
+  @@index([student_id])
+  @@index([tutor_id])
+  @@index([module_id])
+  @@index([status])
+  @@map("certifications")
+}
+
+model TutorReview {
+  id          String   @id @default(uuid()) @db.Uuid
+  tutor_id    String   @db.Uuid
+  student_id  String   @db.Uuid
+  session_id  String?  @unique @db.Uuid
+  rating      Int
+  review_text String?  @db.Text
+  visible_at  DateTime?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  tutor   User     @relation("ReviewTutor",   fields: [tutor_id],   references: [id], onDelete: Cascade)
+  student User     @relation("ReviewStudent", fields: [student_id], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([tutor_id])
+  @@index([student_id])
+  @@map("tutor_reviews")
+}
+
+
+// ============================================================
+// SCHEDULING — availability, sessions, attendance
+// ============================================================
+
+model TutorAvailability {
+  id              String    @id @default(uuid()) @db.Uuid
+  tutor_id        String    @db.Uuid
+  day_of_week     DayOfWeek
+  start_time      String    @db.VarChar(5)  // "HH:MM"
+  end_time        String    @db.VarChar(5)  // "HH:MM"
+  recurring       Boolean   @default(false)
+  effective_from  DateTime? @db.Date
+  effective_until DateTime? @db.Date
+  created_at      DateTime  @default(now())
+
+  tutor           User                    @relation(fields: [tutor_id], references: [id], onDelete: Cascade)
+  change_requests ScheduleChangeRequest[]
+  sessions        Session[]
+
+  @@index([tutor_id])
+  @@index([day_of_week])
+  @@map("tutor_availability")
+}
+
+model ScheduleChangeRequest {
+  id                   String        @id @default(uuid()) @db.Uuid
+  tutor_id             String        @db.Uuid
+  slot_id              String?       @db.Uuid
+  change_type          ChangeType
+  requested_date       DateTime?     @db.Date
+  requested_start_time String?       @db.VarChar(5)
+  requested_end_time   String?       @db.VarChar(5)
+  reason               String        @db.Text
+  status               RequestStatus @default(pending)
+  admin_notes          String?       @db.Text
+  reviewed_by          String?       @db.Uuid
+  reviewed_at          DateTime?
+  created_at           DateTime      @default(now())
+
+  tutor    User               @relation("TutorChangeRequests",   fields: [tutor_id],    references: [id])
+  slot     TutorAvailability? @relation(fields: [slot_id],       references: [id])
+  reviewer User?              @relation("AdminReviewedRequests", fields: [reviewed_by], references: [id])
+
+  @@index([tutor_id])
+  @@index([status])
+  @@map("schedule_change_requests")
+}
+
+model Session {
+  id               String        @id @default(uuid()) @db.Uuid
+  student_id       String        @db.Uuid
+  tutor_id         String        @db.Uuid
+  course_id        String?       @db.Uuid
+  enrollment_id    String?       @db.Uuid
+  module_id        String?       @db.Uuid
+  slot_id          String?       @db.Uuid
+  subject          String        @db.VarChar(200)
+  notes            String?       @db.Text
+  scheduled_date   DateTime      @db.Date
+  start_time       String        @db.VarChar(5)
+  end_time         String        @db.VarChar(5)
+  duration_minutes Int
+  status           SessionStatus @default(pending)
+  cancelled_by     String?       @db.Uuid
+  cancel_reason         String?       @db.Text
+  cancel_requested      Boolean       @default(false)
+  cancel_request_reason String?       @db.Text
+  meeting_link          String?       @db.Text
+  tutor_notes      String?       @db.Text
+  completed_at     DateTime?
+  tutor_paid       Boolean       @default(false)
+  tutor_paid_at    DateTime?
+  tutor_paid_by    String?       @db.Uuid
+  tutor_pay_cents  Int?
+  created_at       DateTime      @default(now())
+
+  student        User               @relation("SessionStudent",      fields: [student_id],    references: [id])
+  tutor          User               @relation("SessionTutor",        fields: [tutor_id],      references: [id])
+  course         Course?            @relation(fields: [course_id],   references: [id])
+  enrollment     Enrollment?        @relation(fields: [enrollment_id], references: [id])
+  module         Module?            @relation(fields: [module_id],   references: [id])
+  slot           TutorAvailability? @relation(fields: [slot_id],     references: [id])
+  canceller       User?              @relation("SessionCancelledBy",  fields: [cancelled_by],  references: [id])
+  paid_by_admin   User?              @relation("SessionPaidBy",        fields: [tutor_paid_by], references: [id])
+  attendance_log   AttendanceLog?
+  support_tickets  SupportTicket[]
+  questionnaire    SessionQuestionnaire[]
+  review           TutorReview?
+
+  @@index([student_id])
+  @@index([tutor_id])
+  @@index([course_id])
+  @@index([enrollment_id])
+  @@index([module_id])
+  @@index([scheduled_date])
+  @@index([status])
+  @@map("sessions")
+}
+
+model AttendanceLog {
+  id           String        @id @default(uuid()) @db.Uuid
+  tutor_id     String        @db.Uuid
+  session_id   String?       @unique @db.Uuid
+  clock_in     DateTime
+  clock_out    DateTime?
+  hours_worked Decimal?      @db.Decimal(5, 2)
+  location     LocationType?
+  notes        String?       @db.Text
+  edited_by    String?       @db.Uuid
+  edit_reason  String?       @db.Text
+  created_at   DateTime      @default(now())
+
+  tutor   User     @relation("TutorAttendance",   fields: [tutor_id],   references: [id])
+  session Session? @relation(fields: [session_id], references: [id])
+  editor  User?    @relation("AttendanceEditedBy", fields: [edited_by],  references: [id])
+
+  @@index([tutor_id])
+  @@index([session_id])
+  @@index([clock_in])
+  @@map("attendance_logs")
+}
+
+
+// ============================================================
+// COMMS — messaging & notifications
+// ============================================================
+
+model Conversation {
+  id              String           @id @default(uuid()) @db.Uuid
+  type            ConversationType @default(direct)
+  title           String?          @db.VarChar(200)
+  created_by      String           @db.Uuid
+  created_at      DateTime         @default(now())
+  last_message_at DateTime?
+
+  creator      User                      @relation(fields: [created_by], references: [id])
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([last_message_at(sort: Desc)])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id              String   @id @default(uuid()) @db.Uuid
+  conversation_id String   @db.Uuid
+  user_id         String   @db.Uuid
+  joined_at       DateTime @default(now())
+  last_read_at    DateTime?
+
+  conversation Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [user_id],         references: [id], onDelete: Cascade)
+
+  @@unique([conversation_id, user_id])
+  @@index([conversation_id])
+  @@index([user_id])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id              String      @id @default(uuid()) @db.Uuid
+  conversation_id String      @db.Uuid
+  sender_id       String      @db.Uuid
+  content         String      @db.Text
+  message_type    MessageType @default(text)
+  sent_at         DateTime    @default(now())
+  edited_at       DateTime?
+  deleted_at      DateTime?
+
+  conversation Conversation        @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  sender       User                @relation(fields: [sender_id],       references: [id])
+  attachments  MessageAttachment[]
+
+  @@index([conversation_id])
+  @@index([sender_id])
+  @@index([sent_at(sort: Desc)])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id          String   @id @default(uuid()) @db.Uuid
+  message_id  String   @db.Uuid
+  file_url    String   @db.Text
+  file_name   String   @db.VarChar(255)
+  file_size   Int?
+  uploaded_at DateTime @default(now())
+
+  message Message @relation(fields: [message_id], references: [id], onDelete: Cascade)
+
+  @@index([message_id])
+  @@map("message_attachments")
+}
+
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  user_id    String           @db.Uuid
+  title      String           @db.VarChar(200)
+  message    String           @db.Text
+  type       NotificationType @default(info)
+  read       Boolean          @default(false)
+  read_at    DateTime?
+  sent_by    String?          @db.Uuid
+  email_sent Boolean          @default(false)
+  created_at DateTime         @default(now())
+
+  recipient User  @relation("NotificationRecipient", fields: [user_id], references: [id], onDelete: Cascade)
+  sender    User? @relation("NotificationSender",    fields: [sent_by], references: [id])
+
+  @@index([user_id])
+  @@index([read])
+  @@index([created_at(sort: Desc)])
+  @@map("notifications")
+}
+
+
+// ============================================================
+// PAYMENTS
+// ============================================================
+
+model Payment {
+  id                       String        @id @default(uuid()) @db.Uuid
+  student_id               String        @db.Uuid
+  course_id                String?       @db.Uuid
+  plan_id                  String?       @db.Uuid
+  managed_plan_id          String?       @db.Uuid
+  stripe_payment_intent_id String?       @unique @db.VarChar(255)
+  receipt_number           String?       @unique @db.VarChar(25)
+  amount_cents             Int
+  currency                 String        @default("usd") @db.VarChar(3)
+  status                   PaymentStatus @default(pending)
+  payment_method           PaymentMethod
+  coupon_code              String?       @db.VarChar(50)
+  discount_cents           Int           @default(0)
+  receipt_url              String?       @db.Text
+  refunded_at              DateTime?
+  refund_reason            String?       @db.Text
+  created_at               DateTime      @default(now())
+
+  student            User               @relation(fields: [student_id],     references: [id])
+  plan               PricingPlan?       @relation(fields: [plan_id],         references: [id])
+  managed_plan       Plan?              @relation("PlanPayments", fields: [managed_plan_id], references: [id])
+  enrollments        Enrollment[]
+  module_enrollments ModuleEnrollment[]
+  support_tickets    SupportTicket[]
+
+  @@index([student_id])
+  @@index([status])
+  @@index([created_at(sort: Desc)])
+  @@map("payments")
+}
+
+
+// ============================================================
+// ADMIN — audit, faqs, contact, jobs
+// ============================================================
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  actor_id       String   @db.Uuid
+  target_user_id String?  @db.Uuid
+  action         String   @db.VarChar(100)
+  entity_type    String   @db.VarChar(100)
+  entity_id      String?  @db.Uuid
+  old_value      Json?
+  new_value      Json?
+  ip_address     String?  @db.VarChar(45)
+  user_agent     String?  @db.Text
+  created_at     DateTime @default(now())
+
+  actor  User  @relation("AuditActor",  fields: [actor_id],       references: [id])
+  target User? @relation("AuditTarget", fields: [target_user_id], references: [id])
+
+  @@index([actor_id])
+  @@index([target_user_id])
+  @@index([action])
+  @@index([entity_id])
+  @@index([created_at(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model Faq {
+  id          String   @id @default(uuid()) @db.Uuid
+  question    String   @db.Text
+  answer      String   @db.Text
+  order_index Int
+  published   Boolean  @default(false)
+  created_by  String?  @db.Uuid
+  created_at  DateTime @default(now())
+
+  creator User? @relation(fields: [created_by], references: [id])
+
+  @@index([published])
+  @@index([order_index])
+  @@map("faqs")
+}
+
+model ContactSubmission {
+  id         String        @id @default(uuid()) @db.Uuid
+  name       String        @db.VarChar(200)
+  email      String        @db.VarChar(255)
+  phone      String?       @db.VarChar(20)
+  subject    String        @db.VarChar(200)
+  message    String        @db.Text
+  status     ContactStatus @default(new)
+  replied_by String?       @db.Uuid
+  replied_at DateTime?
+  created_at DateTime      @default(now())
+
+  replier User? @relation(fields: [replied_by], references: [id])
+
+  @@index([email])
+  @@index([status])
+  @@map("contact_submissions")
+}
+
+model JobQueueLog {
+  id           String    @id @default(uuid()) @db.Uuid
+  job_name     String    @db.VarChar(100)
+  payload      Json?
+  status       JobStatus @default(queued)
+  attempts     Int       @default(0)
+  error        String?   @db.Text
+  started_at   DateTime?
+  completed_at DateTime?
+  created_at   DateTime  @default(now())
+
+  @@index([job_name])
+  @@index([status])
+  @@map("job_queue_logs")
+}
+
+
+model TutorBusySlot {
+  id         String   @id @default(uuid()) @db.Uuid
+  tutor_id   String   @db.Uuid
+  date       DateTime @db.Date
+  start_time String   @db.VarChar(5)
+  end_time   String   @db.VarChar(5)
+  reason     String?  @db.VarChar(255)
+  created_at DateTime @default(now())
+
+  tutor User @relation(fields: [tutor_id], references: [id], onDelete: Cascade)
+
+  @@index([tutor_id])
+  @@index([date])
+  @@map("tutor_busy_slots")
+}
+
+model CourseMeetingLink {
+  id           String    @id @default(uuid()) @db.Uuid
+  course_id    String    @db.Uuid
+  tutor_id     String?   @db.Uuid
+  title        String    @db.VarChar(200)
+  link         String    @db.Text
+  description  String?   @db.Text
+  scheduled_at DateTime?
+  recurring    Boolean   @default(false)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  course Course @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  tutor  User?  @relation(fields: [tutor_id],  references: [id])
+
+  @@index([course_id])
+  @@map("course_meeting_links")
+}
+
+
+
+// New models (at bottom of schema.prisma)
+model TutorProfile {
+  id               String   @id @default(uuid()) @db.Uuid
+  tutor_id         String   @unique @db.Uuid
+  bio              String?  @db.Text
+  qualifications   Json     @default("[]")
+  specialisations  Json     @default("[]")
+  experience_years Int      @default(0)
+  linkedin_url     String?  @db.Text
+  github_url       String?  @db.Text
+  rating           Decimal  @default(0) @db.Decimal(3,2)
+  review_count     Int      @default(0)
+  pay_rate_cents        Int      @default(0)
+  weekly_base_pay_cents Int      @default(0)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  tutor User @relation(fields: [tutor_id], references: [id], onDelete: Cascade)
+  @@map("tutor_profiles")
+}
+
+model OnboardingRequest {
+  id                  String   @id @default(uuid()) @db.Uuid
+  student_id          String   @db.Uuid
+  preferred_tutor_id  String?  @db.Uuid
+  schedule_preference Json     @default("{}")
+  goals               Json     @default("[]")
+  message             String?  @db.Text
+  status              String   @default("pending")
+  assigned_tutor_id   String?  @db.Uuid
+  admin_message       String?  @db.Text
+  admin_id            String?  @db.Uuid
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+  student         User  @relation("OnboardingStudent",   fields: [student_id],        references: [id])
+  preferred_tutor User? @relation("OnboardingPreferred", fields: [preferred_tutor_id], references: [id])
+  assigned_tutor  User? @relation("OnboardingAssigned",  fields: [assigned_tutor_id],  references: [id])
+  admin           User? @relation("OnboardingAdmin",     fields: [admin_id],           references: [id])
+  @@index([student_id])
+  @@index([status])
+  @@map("onboarding_requests")
+}
+
+// ============================================================
+// MODULE TUTORS — which tutors are approved to teach each module
+// ============================================================
+
+model ModuleTutor {
+  id          String   @id @default(uuid()) @db.Uuid
+  module_id   String   @db.Uuid
+  tutor_id    String   @db.Uuid
+  assigned_by String?  @db.Uuid
+  created_at  DateTime @default(now())
+
+  module   Module @relation(fields: [module_id],   references: [id], onDelete: Cascade)
+  tutor    User         @relation("ModuleTutorUser",     fields: [tutor_id],    references: [id], onDelete: Cascade)
+  assigner User?        @relation("ModuleTutorAssigner", fields: [assigned_by], references: [id])
+
+  @@unique([module_id, tutor_id])
+  @@index([module_id])
+  @@index([tutor_id])
+  @@map("module_tutors")
+}
+
+// ============================================================
+// MODULE ENROLLMENTS — student enrolled in specific modules
+// ============================================================
+
+model ModuleEnrollment {
+  id          String           @id @default(uuid()) @db.Uuid
+  student_id  String           @db.Uuid
+  module_id   String           @db.Uuid
+  course_id   String?          @db.Uuid
+  payment_id  String?          @db.Uuid
+  tutor_id    String?          @db.Uuid
+  status      EnrollmentStatus @default(active)
+  enrolled_at DateTime         @default(now())
+
+  student User    @relation("ModuleEnrollmentStudent", fields: [student_id], references: [id])
+  module  Module  @relation(fields: [module_id],  references: [id])
+  payment Payment? @relation(fields: [payment_id], references: [id])
+  tutor   User?   @relation("ModuleEnrollmentTutor", fields: [tutor_id], references: [id])
+
+  @@unique([student_id, module_id])
+  @@index([student_id])
+  @@index([module_id])
+  @@index([course_id])
+  @@index([tutor_id])
+  @@map("module_enrollments")
+}
+
+// ============================================================
+// MODULE CREDITS — session credits per student per module
+// 5 credits granted per module purchase; tutor marks complete to deduct
+// ============================================================
+
+model ModuleCredit {
+  id              String   @id @default(uuid()) @db.Uuid
+  student_id      String   @db.Uuid
+  module_id       String   @db.Uuid
+  credits_granted Int      @default(5)
+  credits_used    Int      @default(0)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  student User         @relation("ModuleCreditStudent", fields: [student_id], references: [id])
+  module  Module @relation(fields: [module_id], references: [id])
+
+  @@unique([student_id, module_id])
+  @@index([student_id])
+  @@index([module_id])
+  @@map("module_credits")
+}
+
+// ============================================================
+// COURSE TUTORS — which tutors are approved for each course
+// ============================================================
+
+model CourseTutor {
+  id          String   @id @default(uuid()) @db.Uuid
+  course_id   String   @db.Uuid
+  tutor_id    String   @db.Uuid
+  assigned_by String?  @db.Uuid
+  created_at  DateTime @default(now())
+
+  course   Course @relation(fields: [course_id],   references: [id], onDelete: Cascade)
+  tutor    User   @relation("CourseTutorUser",     fields: [tutor_id],    references: [id], onDelete: Cascade)
+  assigner User?  @relation("CourseTutorAssigner", fields: [assigned_by], references: [id])
+
+  @@unique([course_id, tutor_id])
+  @@index([course_id])
+  @@index([tutor_id])
+  @@map("course_tutors")
+}
+
+
+model TutorFee {
+  id                String   @id @default(uuid()) @db.Uuid
+  tutor_id          String   @db.Uuid
+  student_id        String   @db.Uuid
+  course_id         String   @db.Uuid
+  assignment_id     String?  @db.Uuid       // links to StudentTutorAssignment
+  amount_cents      Int      @default(0)    // agreed fee for this assignment
+  currency          String   @default("usd") @db.VarChar(3)
+  paid              Boolean  @default(false)
+  paid_at           DateTime?
+  paid_by           String?  @db.Uuid       // admin who marked paid
+  start_date        DateTime @db.Date       // course start date
+  notes             String?  @db.Text
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  tutor      User                    @relation("TutorFees",   fields: [tutor_id],   references: [id])
+  student    User                    @relation("StudentFees", fields: [student_id],  references: [id])
+  course     Course                  @relation(fields: [course_id],  references: [id])
+  assignment StudentTutorAssignment? @relation(fields: [assignment_id], references: [id])
+  admin      User?                   @relation("FeesPaidBy",  fields: [paid_by],    references: [id])
+
+  @@index([tutor_id])
+  @@index([student_id])
+  @@index([paid])
+  @@map("tutor_fees")
+}
+
+
+// ============================================================
+// SUPPORT TICKETS — student issue tracking & admin management
+// ============================================================
+
+model SupportTicket {
+  id                  String         @id @default(uuid()) @db.Uuid
+  student_id          String         @db.Uuid
+  title               String         @db.VarChar(300)
+  category            TicketCategory
+  status              TicketStatus   @default(open)
+  priority            TicketPriority @default(normal)
+  related_payment_id  String?        @db.Uuid
+  related_tutor_id    String?        @db.Uuid
+  related_session_id  String?        @db.Uuid
+  assigned_admin_id   String?        @db.Uuid
+  resolved_at         DateTime?
+  created_at          DateTime       @default(now())
+  updated_at          DateTime       @updatedAt
+
+  student         User             @relation("TicketStudent", fields: [student_id],         references: [id], onDelete: Cascade)
+  assigned_admin  User?            @relation("TicketAdmin",   fields: [assigned_admin_id],   references: [id])
+  related_payment Payment?         @relation(fields: [related_payment_id],  references: [id])
+  related_session Session?         @relation(fields: [related_session_id],  references: [id])
+  messages        SupportMessage[]
+
+  @@index([student_id])
+  @@index([status])
+  @@index([category])
+  @@index([priority])
+  @@index([created_at(sort: Desc)])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id          String   @id @default(uuid()) @db.Uuid
+  ticket_id   String   @db.Uuid
+  sender_id   String   @db.Uuid
+  content     String   @db.Text
+  is_internal Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticket_id],  references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [sender_id], references: [id])
+
+  @@index([ticket_id])
+  @@index([sender_id])
+  @@map("support_messages")
+}
+
+
+// ============================================================
+// MANAGED CONTENT — admin-controlled modules and plans
+// These are the canonical public-facing modules and plan bundles.
+// Separate from the legacy Course/CourseModule/PricingPlan system.
+// ============================================================
+
+model Module {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String   @db.VarChar(200)
+  slug              String   @unique @db.VarChar(200)
+  short_description String?  @db.Text
+  full_description  String?  @db.Text
+  thumbnail_url     String?  @db.Text
+  credit_cost              Int      @default(1)
+  cert_sessions_required   Int?
+  category          String?  @db.VarChar(100)
+  status            String   @default("unpublished") @db.VarChar(20)
+  visibility        String   @default("hidden") @db.VarChar(20)
+  display_order     Int      @default(0)
+  created_by        String?  @db.Uuid
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  creator            User?               @relation("ModuleCreator", fields: [created_by], references: [id])
+  plan_modules       PlanModule[]
+  module_tutors      ModuleTutor[]
+  module_credits     ModuleCredit[]
+  module_enrollments ModuleEnrollment[]
+  certifications     Certification[]
+  sessions           Session[]
+
+  @@index([status])
+  @@index([visibility])
+  @@index([display_order])
+  @@map("modules")
+}
+
+model Plan {
+  id              String    @id @default(uuid()) @db.Uuid
+  name                String    @db.VarChar(200)
+  tagline             String?   @db.VarChar(300)
+  description         String?   @db.Text
+  credits_per_module  Int       @default(4)
+  price_cents         Int       @default(0)
+  currency        String    @default("usd") @db.VarChar(3)
+  billing_type    String    @default("one_time") @db.VarChar(20)
+  whats_included  Json      @default("[]")
+  status          String    @default("draft") @db.VarChar(20)
+  is_recommended  Boolean   @default(false)
+  badge_label     String?   @db.VarChar(50)
+  display_order   Int       @default(0)
+  stripe_plan_id  String?   @db.VarChar(200)
+  created_by      String?   @db.Uuid
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  creator      User?        @relation("PlanCreator", fields: [created_by], references: [id])
+  plan_modules PlanModule[]
+  payments     Payment[]    @relation("PlanPayments")
+
+  @@index([status])
+  @@index([is_recommended])
+  @@index([display_order])
+  @@map("plans")
+}
+
+model PlanModule {
+  id               String  @id @default(uuid()) @db.Uuid
+  plan_id          String  @db.Uuid
+  module_id        String  @db.Uuid
+  credits_included Int     @default(1)
+  display_order    Int     @default(0)
+
+  plan   Plan   @relation(fields: [plan_id],   references: [id], onDelete: Cascade)
+  module Module @relation(fields: [module_id], references: [id], onDelete: Restrict)
+
+  @@unique([plan_id, module_id])
+  @@index([plan_id])
+  @@index([module_id])
+  @@map("plan_modules")
+}
+
+
+// ============================================================
+// HELP CHATS — live support sessions (student/tutor ↔ admin)
+// ============================================================
+
+model HelpChat {
+  id              String            @id @default(uuid()) @db.Uuid
+  requester_id    String            @db.Uuid
+  admin_id        String?           @db.Uuid
+  status          SupportChatStatus @default(waiting)
+  subject         String?           @db.VarChar(200)
+  last_message_at DateTime?
+  claimed_at      DateTime?
+  closed_at       DateTime?
+  closed_by       String?           @db.Uuid
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  requester User            @relation("HelpChatRequester", fields: [requester_id], references: [id])
+  admin     User?           @relation("HelpChatAdmin",     fields: [admin_id],     references: [id])
+  closer    User?           @relation("HelpChatCloser",    fields: [closed_by],    references: [id])
+  messages  HelpChatMessage[]
+
+  @@index([requester_id])
+  @@index([admin_id])
+  @@index([status])
+  @@index([created_at(sort: Desc)])
+  @@map("help_chats")
+}
+
+model HelpChatMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  chat_id   String   @db.Uuid
+  sender_id String   @db.Uuid
+  content   String   @db.Text
+  sent_at   DateTime @default(now())
+
+  chat   HelpChat @relation(fields: [chat_id],   references: [id], onDelete: Cascade)
+  sender User     @relation(fields: [sender_id], references: [id])
+
+  @@index([chat_id])
+  @@index([sent_at(sort: Desc)])
+  @@map("help_chat_messages")
+}
+
+// ============================================================
+// TUTOR BANKING DETAILS — stored so admin can process transfers
+// ============================================================
+
+model TutorBankingDetails {
+  id                  String    @id @default(uuid()) @db.Uuid
+  tutor_id            String    @unique @db.Uuid
+  account_holder_name String    @db.VarChar(200)
+  bank_name           String?   @db.VarChar(200)
+  account_number      String?   @db.VarChar(100)
+  routing_number      String?   @db.VarChar(50)
+  account_type        String    @default("checking") @db.VarChar(20)
+  iban                String?   @db.VarChar(100)
+  swift_code          String?   @db.VarChar(20)
+  paypal_email        String?   @db.VarChar(200)
+  preferred_method    String    @default("bank_transfer") @db.VarChar(30)
+  notes               String?   @db.Text
+  verified            Boolean   @default(false)
+  verified_by         String?   @db.Uuid
+  verified_at         DateTime?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  tutor    User  @relation("TutorBanking",   fields: [tutor_id],    references: [id], onDelete: Cascade)
+  verifier User? @relation("BankingVerifier", fields: [verified_by], references: [id])
+
+  @@index([tutor_id])
+  @@map("tutor_banking_details")
+}
+
+// ============================================================
+// TUTOR PAYOUTS — record of each payment made to a tutor
+// ============================================================
+
+model TutorPayout {
+  id               String    @id @default(uuid()) @db.Uuid
+  tutor_id         String    @db.Uuid
+  amount_cents     Int
+  currency         String    @default("usd") @db.VarChar(3)
+  method           String    @default("bank_transfer") @db.VarChar(30)
+  reference_number String?   @db.VarChar(200)
+  notes            String?   @db.Text
+  paid_by          String    @db.Uuid
+  paid_at          DateTime  @default(now())
+  period_start     DateTime? @db.Date
+  period_end       DateTime? @db.Date
+  created_at       DateTime  @default(now())
+
+  tutor User @relation("TutorPayouts",     fields: [tutor_id], references: [id])
+  admin User @relation("TutorPayoutAdmin", fields: [paid_by],  references: [id])
+
+  @@index([tutor_id])
+  @@index([paid_at(sort: Desc)])
+  @@map("tutor_payouts")
+}
+
+// ============================================================
+// WEEKLY PAYROLL PAYMENTS — one record per tutor per CST week
+// ============================================================
+
+model PayrollPayment {
+  id                  String    @id @default(uuid()) @db.Uuid
+  tutor_id            String    @db.Uuid
+  week_start          DateTime
+  week_end            DateTime
+  sessions_completed  Int       @default(0)
+  session_pay_cents   Int       @default(0)
+  base_pay_cents      Int       @default(0)
+  total_pay_cents     Int       @default(0)
+  status              String    @default("PENDING") @db.VarChar(10)
+  approved_by_email   String?   @db.VarChar(255)
+  approved_at         DateTime?
+  reference_number    String?   @db.VarChar(200)
+  payment_notes       String?   @db.Text
+  notification_sent   Boolean   @default(false)
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  tutor User @relation("TutorPayrollPayments", fields: [tutor_id], references: [id])
+
+  @@unique([tutor_id, week_start])
+  @@index([tutor_id])
+  @@index([status])
+  @@index([week_start])
+  @@map("payroll_payments")
+}
+
+
+// ============================================================
+// EMAIL TEMPLATES — admin-editable content for outgoing emails
+// ============================================================
+
+model EmailTemplate {
+  id         String   @id @default(uuid()) @db.Uuid
+  key        String   @unique @db.VarChar(50)
+  name       String   @db.VarChar(100)
+  subject    String   @db.VarChar(200)
+  preheader  String?  @db.Text
+  heading    String   @db.VarChar(200)
+  intro      String   @db.Text
+  steps      Json     @default("[]")
+  cta_label  String   @db.VarChar(100)
+  updated_by String?  @db.Uuid
+  updated_at DateTime @updatedAt
+  created_at DateTime @default(now())
+
+  updater User? @relation("EmailTemplateUpdater", fields: [updated_by], references: [id])
+
+  @@index([key])
+  @@map("email_templates")
+}

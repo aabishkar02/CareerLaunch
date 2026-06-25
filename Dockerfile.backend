@@ -1,0 +1,52 @@
+# ============================================================
+# TUTORING PLATFORM — Backend Dockerfile
+# Multi-stage build: dev stage + production stage
+# ============================================================
+
+# ─── Stage 1: Base ──────────────────────────────────────────
+FROM node:20-alpine AS base
+WORKDIR /app
+# OS deps needed by some npm packages (bcrypt, canvas, etc.)
+RUN apk add --no-cache libc6-compat openssl python3 make g++
+# Copy package files first for layer caching
+COPY backend/package*.json ./
+RUN npm ci
+
+
+# ─── Stage 2: Development ───────────────────────────────────
+FROM base AS development
+ENV NODE_ENV=development
+COPY backend/ .
+# Generate Prisma client (needs schema.prisma to exist)
+RUN npx prisma generate
+EXPOSE 3000
+# nodemon watches for file changes and auto-restarts
+CMD ["npm", "run", "dev"]
+
+
+# ─── Stage 3: Production builder ────────────────────────────
+FROM base AS builder
+ENV NODE_ENV=production
+COPY backend/ .
+# Install ALL deps including devDeps for the build step
+RUN npm ci
+RUN npx prisma generate
+
+
+# ─── Stage 4: Production runner ─────────────────────────────
+FROM node:20-alpine AS production
+ENV NODE_ENV=production
+WORKDIR /app
+# Only bring in what we need — no devDependencies
+RUN apk add --no-cache libc6-compat openssl
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/server.js ./server.js
+# Non-root user for security
+RUN addgroup -g 1001 -S nodejs && adduser -S nodeuser -u 1001
+USER nodeuser
+EXPOSE 3000
+# Runs migrations then starts server
+CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
