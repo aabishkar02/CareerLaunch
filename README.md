@@ -53,8 +53,6 @@ career-launch/
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
 ├── docs/
-│   └── CareerLaunch_Frontend_Spec.docx
-│
 ├── backend/
 │   ├── server.js               # Entry point — Express + Socket.IO + security middleware
 │   ├── prisma.config.js        # Prisma v7 config (schema + migrations paths, DATABASE_URL)
